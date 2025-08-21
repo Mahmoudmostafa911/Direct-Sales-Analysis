@@ -1,0 +1,173 @@
+USE [Sales]
+GO
+/****** Object:  StoredProcedure [dbo].[DishSalesanalysis]    Script Date: 8/19/2025 1:08:04 AM ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+ALTER PROC [dbo].[DishSalesanalysis] AS
+
+
+Declare @startDate as date
+declare @enddate as date
+set @startDate = '20240101'
+
+
+
+DECLARE @Deleted_Rows INT;
+SET @Deleted_Rows = 1;
+
+-- Delete some small number of rows at a time
+ DELETE [dbo].[Direct Sales Analysis]
+WHERE [DATE] >= @startDate
+
+
+
+;WITH CTE AS(
+
+SELECT CAST([Date] AS DATE) AS [Date]
+      ,I.[Empnum]
+	  ,[Calls] as 'International Calls'
+	  ,0 as 'English Calls'
+	  ,I.[Hopper Upgrades] as 'International Upgarde Calls'
+	  ,0  as 'English Upgarde Calls'
+      ,I.[Spend] as 'International Spend'
+	  ,0  as 'English Spend'
+	  ,[Upgrade Rate] as 'INT Upgrade Rate'
+	  ,0 as 'ENG Upgrade Rate'
+	  ,case when Spend != 0 then count(Spend) else 0 end as 'INT number Of Spend'
+	  , 0   as 'ENG number Of Spend'
+  FROM [dbo].[Hopper_International$] as I 
+
+  GROUP BY 
+  [Date]
+  ,I.[Empnum]
+  ,[Calls]
+  ,I.[Hopper Upgrades]
+  ,I.[Spend]
+  ,[Upgrade Rate]
+
+
+  UNION ALL
+
+  SELECT
+      CAST([Date] AS DATE) AS [Date]
+      ,H.[Empnum]
+	  ,0 as 'International Calls'
+	  ,H.[Calls] as 'English Calls'
+	  ,0 as 'International Upgarde Calls'
+	  ,H.[Hopper Upgrades] as 'English Upgarde Calls'
+      ,0 as 'International Spend'
+	  ,H.[Spend] as 'English Spend'
+	  ,0 as 'INT Upgrade Rate'
+	  ,[Upgrade Rate] as 'ENG Upgrade Rate'
+	  ,0  as 'INT number Of Spend'
+	  ,case when Spend != 0 then count(Spend) else 0  end as 'ENG number Of Spend'
+  FROM  [dbo].[Hopper_English$] H
+  GROUP by
+        CAST([Date] AS DATE)
+      ,H.[Empnum]
+	  ,H.[Hopper Upgrades]
+	  ,[Upgrade Rate]
+	  ,H.[Spend]
+	  ,H.[Calls]
+  )
+  
+
+ INSERT INTO [dbo].[Direct Sales Analysis]
+
+
+    SELECT
+	  CAST([Date] AS DATE) AS [Date]
+	  ,[ID]
+      ,[Name]
+	  ,KPI
+	  ,SUM (C1)as 'Compenent1'
+	  ,SUM (C4)as 'Compenent4'
+ FROM CTE JOIN [dbo].[Sales Dist] 
+ ON [ID] = [Empnum]
+		
+	CROSS APPLY(
+		Values
+		('ENG Calls',0,[English Calls]),
+		('INT Calls',0,[International Calls]),
+		('Total Calls',0,[English Calls]+[International Calls]),
+		('ENG Upgrade Rate',[English Upgarde Calls],[English Calls]),
+		('INT Upgrade Rate',[International Upgarde Calls],[International Calls]),
+		('Total upgrade Rate', [English Upgarde Calls]+[International Upgarde Calls],[English Calls]+[International Calls]),
+		('ENG Upgrade Calls',0,[English Upgarde Calls]),
+		('INT Upgrade Calls',0,[International Upgarde Calls]),
+		('Total Upgrade Calls',0,[English Upgarde Calls]+[International Upgarde Calls]),
+		('ENG Protect Calls', 0, [ENG Upgrade Rate] * [English Calls]),
+		('INT Protect Calls', 0, [INT Upgrade Rate] * [International Calls]),
+		('Total Protect Calls', 0,[English Calls]+[International Calls]),
+		('ENG Protect Rate',[ENG Upgrade Rate] * [English Calls],[English Calls]),
+		('INT Protect Rate',[INT Upgrade Rate] * [International Calls],[International Calls]),
+		('Total Protect Rate',([ENG Upgrade Rate] * [English Calls]) + ([INT Upgrade Rate] * [International Calls]),[English Calls]+[International Calls]),
+		('ENG Spend',[English Spend] * [English Calls],[English Calls]),
+		('INT Spend',[International Spend] * [International Calls],[International Calls]),
+		('Total Spend',([English Spend]+[International Spend]) * ([English Calls]+[International Calls]),[English Calls]+[International Calls])
+		)ENG (KPI,C1,C4)
+
+Where Date >= @startDate
+and (C1+C4) !=0  
+ GROUP BY
+	   Date
+	  ,[ID]
+      ,[Name]
+	  ,KPI
+
+
+
+  UNION ALL
+
+  	  	  SELECT
+	  CAST([Date] AS DATE) AS [Date]
+	  ,[ID]
+      ,[Name]
+	  ,KPI
+	  ,SUM (C1)as 'Compenent1'
+	  ,SUM (C4)as 'Compenent4'
+ FROM [dbo].[Movers$] JOIN [dbo].[Sales Dist] 
+ ON [ID] = EmpNum  
+		
+	CROSS APPLY(
+		Values
+		('Move Rate',[Moves Booked (for Mover KPI) along ],[Handled Calls (for Mover KPI) along ]),
+		('Move Calls',0,[Handled Calls (for Mover KPI) along ])
+		)MOVE (KPI,C1,C4)
+Where Date >= @startDate
+and (C1+C4) !=0  
+ GROUP BY
+	   CAST([Date] AS DATE)  
+	  ,[ID]
+      ,[Name]
+	  ,[KPI]
+
+	  UNION ALL
+
+	  SELECT
+	  CAST([Date] AS DATE) AS [Date]
+	  ,[ID]
+      ,[Name]
+	  ,KPI
+
+	  ,SUM (C1)as 'Compenent1'
+	  ,SUM (C4)as 'Compenent4'
+ FROM [dbo].[Connects$] JOIN [dbo].[Sales Dist] 
+ ON [ID] = [Empnum]  
+		
+	CROSS APPLY(
+		Values
+		('Connect Save Rate',[Saves],[Calls]),
+		('Connect Calls',0,[Calls])
+
+		)ENG (KPI,C1,C4)
+Where Date >= @startDate 
+and (C1+C4) !=0  
+ GROUP BY
+	   CAST([Date] AS DATE) 
+	  ,[ID]
+      ,[Name]
+	  ,KPI
+
