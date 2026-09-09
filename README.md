@@ -15,7 +15,7 @@ End-to-end sales reporting pipeline: a SQL Server stored procedure cleans and ag
 ## 📂 Files in this repo
 | File | Purpose |
 |---|---|
-| `SQLCode.txt` | Stored procedure and table definitions (`Sales Dist`, `Direct Sales Analysis`) |
+| `SQLCode.sql` | Stored procedure and table definitions (`Sales Dist`, `Direct Sales Analysis`) |
 | `comp.xlsx` | Source data extract loaded into SQL Server |
 | `Direct Sales Analysis.pbix` | Power BI report — open in Power BI Desktop |
 
